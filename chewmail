@@ -1,0 +1,296 @@
+#!/usr/bin/perl -w 
+
+=head1 NAME
+
+chewmail - mail archiver
+
+=head1 SYNOPSIS
+
+B<chewmail> [OPTIONS] <MAILBOX>
+
+=head1 DESCRIPTION
+
+B<chewmail> is a program for archiving mail. It is inspired by the by the
+Python-based B<archivemail>, but with more useful semantics. All mail
+is archived to the mailbox specified with the B<--output-box> switch,
+in mbox format. It can read mailboxes in mbox, Maildir and MH formats.
+
+Internally, B<chewmail> uses L<Mail::Box>, so it support file names
+and URLs supported by that module.
+
+=cut
+
+use strict;
+
+use Mail::Box::Manager;
+use Date::Format;
+use Date::Parse;
+use Getopt::Long qw(:config no_ignore_case bundling);
+
+my $version = '1.0';
+
+my %output_boxes = ();
+my $input_box_path;
+my $input_box;
+my $box_access;
+my $manager = Mail::Box::Manager->new;
+
+sub generate_outbox_path($$)
+{
+    my ($format, $timestamp) = @_;
+
+    return time2str($format, $timestamp);
+}
+
+sub include_message($$$)
+{
+    my ($timestamp, $days, $date) = @_;
+
+    if ($date) {
+	return $timestamp < $date;
+    }
+    elsif ($days) {
+	return (time - $timestamp) > ($days * 24 * 60 * 60);
+    }
+
+    return 1;
+}
+
+sub usage()
+{
+   return "Usage: chewmail [OPTIONS] <MAILBOX>
+Archive the messages in <MAILBOX>
+
+-o, --output-box=MAILBOX-FORMAT    Mailbox to archive messages to.
+                                   Accepts date conversion specifiers from
+                                   Date::Format.
+-d, --days=DAYS-OLD                Archive messages older than DAYS-OLD.
+-D, --date=DATE                    Archive messages older than DATE.
+-R, --only-read                    Only archive messages marked read.
+    --delete-immediately           Write changes for every message archived.
+-n, --dry-run                      Go through the motions, but no changes
+                                   are written to disk.
+-v, --verbose                      Be more verbose.
+-q, --quiet                        Output only error messages.
+-V, --version                      Print the version number and exit.
+-h, --help                         Print this information and exit.
+
+Report bugs to <eric@kuroneko.ca>.
+"; 
+}
+
+=head1 OPTIONS
+
+=over 4
+
+=item B<-o> I<mailbox-format>, B<--output-box>=I<mailbox-format>
+
+The mailbox to archive messages to. The mailbox is run through the
+L<Date::Format> module, so it supports all it's conversion
+specifiers. The date and time is relative to the messages timestamp. A
+sample of the conversion specifiers follows:
+
+    %%      PERCENT
+    %b      month abbr
+    %B      month
+    %d      numeric day of the month, with leading zeros (eg 01..31)
+    %e      numeric day of the month, without leading zeros (eg 1..31)
+    %D      MM/DD/YY
+    %G      GPS week number (weeks since January 6, 1980)
+    %h      month abbr
+    %H      hour, 24 hour clock, leading 0's)
+    %I      hour, 12 hour clock, leading 0's)
+    %j      day of the year
+    %k      hour
+    %l      hour, 12 hour clock
+    %L      month number, starting with 1
+    %m      month number, starting with 01
+    %n      NEWLINE
+    %o      ornate day of month -- "1st", "2nd", "25th", etc.
+    %t      TAB
+    %U      week number, Sunday as first day of week
+    %w      day of the week, numerically, Sunday == 0
+    %W      week number, Monday as first day of week
+    %x      date format: 11/19/94
+    %y      year (2 digits)
+    %Y      year (4 digits)
+
+=item B<-d> I<days-old>, B<--days>=days-old
+
+Only archive messages older than than this many days.
+
+=item B<-D> I<date>, B<--date>=I<date>
+
+Only archive messages old than this date. The I<date> can be any date
+understood by Perl's L<Date::Parse> module.
+
+=item B<-R>, B<--only-read>
+
+Only archive messages that are marked seen or read.
+
+=item B<--delete-immediately>
+
+Synchonize the mailboxes after every message is moved. This will be
+substantially slower but may provide better recovery for some mailbox
+formats in the event of a crash.
+
+=item B<-n>, B<--dry-run>
+
+Go through all the motions of archiving the mail, but don't actually
+change any mailboxes.
+
+=item B<-v>, B<--verbose>
+
+Output more informational messages. Use multiple times for more
+verbosity.
+
+=item B<-q>, B<--quiet>
+
+Don't output any messages other than error messages. 
+
+=item B<-V>, B<--version>
+
+Print the version number then exit.
+
+=item B<-h>, B<--help>
+
+Print usage information then exit.
+
+=back
+
+=cut
+
+# options parsing
+my $output_box_format;
+my $days = 0;
+my $date = '';
+my $delete_immediately = 0;
+my $only_read = 0;
+my $dry_run = 0;
+my $verbose = 0;
+my $quiet = 0;
+my $show_version = 0;
+my $help = 0;
+
+GetOptions('o|output-box=s' => \$output_box_format,
+           'd|days:i' => \$days,
+           'D|date:s' => \$date,
+           'R|only-read' => \$only_read,
+           'v|verbose+' => \$verbose,
+	   'q|quiet' => \$quiet,
+           'delete-immediately' => \$delete_immediately,
+           'n|dry-run' => \$dry_run,
+           'h|help' => \$help,
+           'V|version' => \$show_version)
+    or die "Configuration error\n\n" . usage;
+
+if ($show_version) {
+    print "$version\n";
+    exit 0;
+}
+
+if ($help) {
+    print usage;
+    exit 0;
+}
+
+# If we're doing a dry run, for safety we want to open the mailboxes
+# read-only 
+$box_access = $dry_run ? 'r' : 'rw';
+
+die "Need to specify one mailbox to archive.\n\n" . usage if (@ARGV != 1);
+$input_box_path = $ARGV[0];
+
+print "Opening mailbox: $input_box_path\n" if $verbose > 0;
+$input_box = $manager->open(folder => $input_box_path, access => $box_access) 
+    or die "Cannot open folder $input_box_path\n";
+
+$date = str2time($date) if ($date);
+die "Cannot understand --date option.\n" if !defined($date);
+
+$quiet = 0 if ($verbose > 0);
+
+my @messages;
+
+if ($only_read) {
+    @messages = $input_box->messages('seen');
+}
+else {
+    @messages = $input_box->messages();
+}
+
+my $output_box_path;
+my $output_box;
+my $timestamp;
+
+my ($archived_count, $untouched_count) = (0, 0);
+
+foreach my $message (@messages) {
+    $timestamp = $message->timestamp;
+    if (include_message($timestamp, $date, $days)) {
+        $output_box_path = generate_outbox_path($output_box_format, 
+						$timestamp);
+
+        if (!exists($output_boxes{$output_box_path})) {
+            $output_boxes{$output_box_path} = 
+                $manager->open(folder => $output_box_path, 
+                               type => 'Mail::Box::Mbox',
+                               create => 1, access => $box_access) 
+                or die "Could not open $output_box_path\n";
+            print "Opening mailbox: $output_boxes{$output_box_path}\n" 
+                if ($verbose > 0);
+        }
+        $output_box = $output_boxes{$output_box_path};
+	print "Archiving message: " . $message->messageId . "\n" 
+	    if $verbose > 2; 
+
+	unless ($dry_run) {
+            $manager->copyMessage($output_box, $message) 
+                or die "Could not copy message\n";
+            $message->delete;
+        }
+
+	$archived_count++;
+
+	if ($delete_immediately) {
+            # Write changes immediately, order matters
+            print "Synching mailboxes\n" if ($verbose > 1);
+            unless ($dry_run) {
+                $output_box->write;
+                $input_box->write;
+            }
+        }
+    }
+    else {
+        $untouched_count++;
+    }
+}
+
+print "$input_box_path: " . int(@messages) . " messages considered, " .
+    "$archived_count archived, $untouched_count kept\n" unless $quiet;
+
+foreach $output_box (keys %output_boxes) {
+    print "Closing $output_box" if $verbose > 1;
+    $output_boxes{$output_box}->close;
+}
+
+=head1 EXAMPLES
+
+Archive two day old messages in F<inbox> to F<inbox-old>:
+
+  chewmail --days 2 -o inbox-old inbox
+
+Archive read messages to a mailbox named the year-month of the
+message:
+
+  chewmail --read-only -o %Y-%m inbox
+
+=head1 SEE ALSO
+
+L<archivemail(1)>, L<Date::Parse>, L<Date::Format>, L<Mail::Box>
+
+=head1 AUTHOR
+
+Eric Dorland <eric@kuroneko.ca>
+
+=cut
