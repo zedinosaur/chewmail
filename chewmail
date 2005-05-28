@@ -6,7 +6,7 @@ chewmail - mail archiver
 
 =head1 SYNOPSIS
 
-B<chewmail> [OPTIONS] <MAILBOX>
+B<chewmail> [OPTIONS] <MAILBOX> ... 
 
 =head1 DESCRIPTION
 
@@ -23,11 +23,12 @@ and URLs supported by that module.
 use strict;
 
 use Mail::Box::Manager;
+use Mail::Message;
 use Date::Format;
 use Date::Parse;
 use Getopt::Long qw(:config no_ignore_case bundling);
 
-my $version = '1.0';
+my $version = '1.1';
 
 my %output_boxes = ();
 my $input_box_path;
@@ -58,7 +59,7 @@ sub include_message($$$)
 
 sub usage()
 {
-   return "Usage: chewmail [OPTIONS] <MAILBOX>
+   return "Usage: chewmail [OPTIONS] <MAILBOX> ...
 Archive the messages in <MAILBOX>
 
 -o, --output-box=MAILBOX-FORMAT    Mailbox to archive messages to.
@@ -68,6 +69,8 @@ Archive the messages in <MAILBOX>
 -D, --date=DATE                    Archive messages older than DATE.
 -R, --only-read                    Only archive messages marked read.
     --delete-immediately           Write changes for every message archived.
+    --preserve-timestamp           Preserve the atime and mtime on the input 
+                                   mailbox.
 -n, --dry-run                      Go through the motions, but no changes
                                    are written to disk.
 -v, --verbose                      Be more verbose.
@@ -87,7 +90,8 @@ Report bugs to <eric\@kuroneko.ca>.
 
 The mailbox to archive messages to. The mailbox is run through the
 L<Date::Format> module, so it supports all it's conversion
-specifiers. The date and time is relative to the messages timestamp. A
+specifiers. The date and time is relative to the messages timestamp,
+or the current time if the timestamp is impossible to determine. A
 sample of the conversion specifiers follows:
 
     %%      PERCENT
@@ -134,6 +138,11 @@ Synchonize the mailboxes after every message is moved. This will be
 substantially slower but may provide better recovery for some mailbox
 formats in the event of a crash.
 
+=item B<--preserve-timestamp>
+
+Preserve the atime and mtime of the input mailbox. This only affects
+file-based mailboxes, such as mbox. 
+
 =item B<-n>, B<--dry-run>
 
 Go through all the motions of archiving the mail, but don't actually
@@ -166,6 +175,7 @@ my $days = 0;
 my $date = '';
 my $delete_immediately = 0;
 my $only_read = 0;
+my $preserve_timestamp = 0;
 my $dry_run = 0;
 my $verbose = 0;
 my $quiet = 0;
@@ -176,8 +186,9 @@ GetOptions('o|output-box=s' => \$output_box_format,
            'd|days:i' => \$days,
            'D|date:s' => \$date,
            'R|only-read' => \$only_read,
+           'preserve-timestamp' => \$preserve_timestamp,
            'v|verbose+' => \$verbose,
-	   'q|quiet' => \$quiet,
+           'q|quiet' => \$quiet,
            'delete-immediately' => \$delete_immediately,
            'n|dry-run' => \$dry_run,
            'h|help' => \$help,
@@ -199,75 +210,92 @@ if ($help) {
 $box_access = $dry_run ? 'r' : 'rw';
 
 die "Need to specify one mailbox to archive.\n\n" . usage if (@ARGV != 1);
-$input_box_path = $ARGV[0];
 
-print "Opening mailbox: $input_box_path\n" if $verbose > 0;
-$input_box = $manager->open(folder => $input_box_path, access => $box_access) 
-    or die "Cannot open folder $input_box_path\n";
+foreach $input_box_path (@ARGV) {
+    my (@status, $atime, $mtime);
+    
+    if (-f $input_box_path) {
+        @status = stat _;
+        ($atime, $mtime) = ($status[8], $status[9]) if @status;
+    }
+    
+    print "Opening mailbox: $input_box_path\n" if $verbose > 0;
+    $input_box = $manager->open(folder => $input_box_path, 
+                                access => $box_access) 
+        or die "Cannot open folder $input_box_path\n";
 
-$date = str2time($date) if ($date);
-die "Cannot understand --date option.\n" if !defined($date);
+    $date = str2time($date) if ($date);
+    die "Cannot understand --date option.\n" if !defined($date);
 
-$quiet = 0 if ($verbose > 0);
+    $quiet = 0 if ($verbose > 0);
 
-my @messages;
+    my @messages;
 
-if ($only_read) {
-    @messages = $input_box->messages('seen');
-}
-else {
-    @messages = $input_box->messages();
-}
-
-my $output_box_path;
-my $output_box;
-my $timestamp;
-
-my ($archived_count, $untouched_count) = (0, 0);
-
-foreach my $message (@messages) {
-    $timestamp = $message->timestamp;
-    if (include_message($timestamp, $date, $days)) {
-        $output_box_path = generate_outbox_path($output_box_format, 
-						$timestamp);
-
-        if (!exists($output_boxes{$output_box_path})) {
-            $output_boxes{$output_box_path} = 
-                $manager->open(folder => $output_box_path, 
-                               type => 'Mail::Box::Mbox',
-                               create => 1, access => $box_access) 
-                or die "Could not open $output_box_path\n";
-            print "Opening mailbox: $output_boxes{$output_box_path}\n" 
-                if ($verbose > 0);
-        }
-        $output_box = $output_boxes{$output_box_path};
-	print "Archiving message: " . $message->messageId . "\n" 
-	    if $verbose > 2; 
-
-	unless ($dry_run) {
-            $manager->copyMessage($output_box, $message) 
-                or die "Could not copy message\n";
-            $message->delete;
-        }
-
-	$archived_count++;
-
-	if ($delete_immediately) {
-            # Write changes immediately, order matters
-            print "Synching mailboxes\n" if ($verbose > 1);
-            unless ($dry_run) {
-                $output_box->write;
-                $input_box->write;
-            }
-        }
+    if ($only_read) {
+        @messages = $input_box->messages('seen');
     }
     else {
-        $untouched_count++;
+        @messages = $input_box->messages();
     }
-}
 
-print "$input_box_path: " . int(@messages) . " messages considered, " .
-    "$archived_count archived, $untouched_count kept\n" unless $quiet;
+    my $output_box_path;
+    my $output_box;
+    my $timestamp;
+    my ($archived_count, $untouched_count) = (0, 0);
+
+    foreach my $message (@messages) {
+        # Hack to workaround bug in Mail::Box, should be removed once fixed
+        $message->head->load;
+
+        $timestamp = $message->timestamp || time;
+        if (include_message($timestamp, $date, $days)) {
+            $output_box_path = generate_outbox_path($output_box_format, 
+                                                    $timestamp);
+
+            if (!exists($output_boxes{$output_box_path})) {
+                $output_boxes{$output_box_path} = 
+                    $manager->open(folder => $output_box_path, 
+                                   type => 'Mail::Box::Mbox',
+                                   create => 1, access => $box_access) 
+                    or die "Could not open $output_box_path\n";
+                print "Opening mailbox: $output_boxes{$output_box_path}\n" 
+                    if ($verbose > 0);
+            }
+            $output_box = $output_boxes{$output_box_path};
+            print "Archiving message: " . $message->messageId . "\n" 
+                if $verbose > 2; 
+
+            unless ($dry_run) {
+                $manager->copyMessage($output_box, $message) 
+                    or die "Could not copy message\n";
+                $message->delete;
+            }
+
+            $archived_count++;
+
+            if ($delete_immediately) {
+                # Write changes immediately, order matters
+                print "Synching mailboxes\n" if ($verbose > 1);
+                unless ($dry_run) {
+                    $output_box->write;
+                    $input_box->write;
+                }
+            }
+        }
+        else {
+            $untouched_count++;
+        }
+    }
+    
+    print "Closing $input_box_path\n";
+    $input_box->close;
+
+    utime $atime, $mtime, $input_box_path 
+        if $atime && $mtime && $preserve_timestamp;
+
+    print "$input_box_path: " . int(@messages) . " messages considered, " .
+        "$archived_count archived, $untouched_count kept\n" unless $quiet;
+}
 
 foreach $output_box (keys %output_boxes) {
     print "Closing $output_box" if $verbose > 1;
