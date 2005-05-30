@@ -209,7 +209,11 @@ if ($help) {
 # read-only 
 $box_access = $dry_run ? 'r' : 'rw';
 
-die "Need to specify one mailbox to archive.\n\n" . usage if (@ARGV != 1);
+die "Need to specify one mailbox to archive.\n\n" . usage if (@ARGV < 1);
+
+my $output_box_path;
+my $output_box;
+my $timestamp;
 
 foreach $input_box_path (@ARGV) {
     my (@status, $atime, $mtime);
@@ -238,9 +242,6 @@ foreach $input_box_path (@ARGV) {
         @messages = $input_box->messages();
     }
 
-    my $output_box_path;
-    my $output_box;
-    my $timestamp;
     my ($archived_count, $untouched_count) = (0, 0);
 
     foreach my $message (@messages) {
@@ -287,7 +288,7 @@ foreach $input_box_path (@ARGV) {
         }
     }
     
-    print "Closing $input_box_path\n";
+    print "Closing $input_box_path\n" if $verbose > 1;
     $input_box->close;
 
     utime $atime, $mtime, $input_box_path 
