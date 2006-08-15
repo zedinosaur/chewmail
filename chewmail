@@ -28,7 +28,7 @@ use Date::Format;
 use Date::Parse;
 use Getopt::Long qw(:config no_ignore_case bundling);
 
-my $version = '1.1';
+my $version = '1.2';
 
 my %output_boxes = ();
 my $input_box_path;
@@ -210,6 +210,7 @@ if ($help) {
 $box_access = $dry_run ? 'r' : 'rw';
 
 die "Need to specify one mailbox to archive.\n\n" . usage if (@ARGV < 1);
+die "Need to specify an output box.\n\n" . usage unless $output_box_format;
 
 my $output_box_path;
 my $output_box;
@@ -312,7 +313,7 @@ Archive two day old messages in F<inbox> to F<inbox-old>:
 Archive read messages to a mailbox named the year-month of the
 message:
 
-  chewmail --read-only -o %Y-%m inbox
+  chewmail --only-read -o %Y-%m inbox
 
 =head1 SEE ALSO
 
