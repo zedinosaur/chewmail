@@ -21,6 +21,7 @@ and URLs supported by that module.
 =cut
 
 use strict;
+use warnings;
 
 use Mail::Box::Manager;
 use Mail::Message;
