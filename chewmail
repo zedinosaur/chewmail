@@ -226,7 +226,8 @@ foreach $input_box_path (@ARGV) {
     
     print "Opening mailbox: $input_box_path\n" if $verbose > 0;
     $input_box = $manager->open(folder => $input_box_path, 
-                                access => $box_access) 
+                                access => $box_access,
+                                remove_when_empty => 0)
         or die "Cannot open folder $input_box_path\n";
 
     $date = str2time($date) if ($date);
