@@ -14,9 +14,10 @@ install: all
 	install -m 644 chewmail.1 $(DESTDIR)/usr/share/man/man1
 
 dist: clean
-	files=`ls` ; mkdir chewmail-$(VERSION) ; cp -r $$files chewmail-$(VERSION)
-	tar --exclude=CVS --exclude=.cvsignore --exclude=.svn -zcf \
-		chewmail-$(VERSION).tar.gz chewmail-$(VERSION)
+	mkdir chewmail-$(VERSION)
+	files=`ls` ; cp -r $$files chewmail-$(VERSION)
+	tar --exclude=.gitignore --exclude=.git -Jcf \
+		chewmail-$(VERSION).tar.xz chewmail-$(VERSION)
 	rm -rf chewmail-$(VERSION)
 
 chewmail.1: chewmail
