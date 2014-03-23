@@ -37,14 +37,14 @@ my $input_box;
 my $box_access;
 my $manager = Mail::Box::Manager->new;
 
-sub generate_outbox_path($$)
+sub generate_outbox_path
 {
     my ($format, $timestamp) = @_;
 
     return time2str($format, $timestamp);
 }
 
-sub include_message($$$)
+sub include_message
 {
     my ($timestamp, $date, $days) = @_;
 
@@ -58,7 +58,7 @@ sub include_message($$$)
     return 1;
 }
 
-sub usage()
+sub usage
 {
    return "Usage: chewmail [OPTIONS] <MAILBOX> ...
 Archive the messages in <MAILBOX>
@@ -217,7 +217,7 @@ my $output_box_path;
 my $output_box;
 my $timestamp;
 
-foreach $input_box_path (@ARGV) {
+foreach my $input_box_path (@ARGV) {
     my (@status, $atime, $mtime);
     
     if (-f $input_box_path) {
@@ -301,7 +301,7 @@ foreach $input_box_path (@ARGV) {
         "$archived_count archived, $untouched_count kept\n" unless $quiet;
 }
 
-foreach $output_box (keys %output_boxes) {
+foreach my $output_box (keys %output_boxes) {
     print "Closing $output_box" if $verbose > 1;
     $output_boxes{$output_box}->close;
 }
