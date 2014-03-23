@@ -226,7 +226,7 @@ foreach my $input_box_path (@ARGV) {
     }
     
     print "Opening mailbox: $input_box_path\n" if $verbose > 0;
-    $input_box = $manager->open(folder => $input_box_path, 
+    $input_box = $manager->open(folder => $input_box_path,
                                 access => $box_access,
                                 remove_when_empty => 0)
         or die "Cannot open folder $input_box_path\n";
@@ -253,17 +253,17 @@ foreach my $input_box_path (@ARGV) {
 
         $timestamp = $message->timestamp || time;
         if (include_message($timestamp, $date, $days)) {
-            $output_box_path = generate_outbox_path($output_box_format, 
+            $output_box_path = generate_outbox_path($output_box_format,
                                                     $timestamp);
 
             if (!exists($output_boxes{$output_box_path})) {
+                print "Opening mailbox: $output_boxes{$output_box_path}\n"
+                    if ($verbose > 0);
                 $output_boxes{$output_box_path} = 
                     $manager->open(folder => $output_box_path, 
                                    type => 'Mail::Box::Mbox',
                                    create => 1, access => $box_access) 
                     or die "Could not open $output_box_path\n";
-                print "Opening mailbox: $output_boxes{$output_box_path}\n" 
-                    if ($verbose > 0);
             }
             $output_box = $output_boxes{$output_box_path};
             print "Archiving message: " . $message->messageId . "\n" 
@@ -281,8 +281,10 @@ foreach my $input_box_path (@ARGV) {
                 # Write changes immediately, order matters
                 print "Synching mailboxes\n" if ($verbose > 1);
                 unless ($dry_run) {
-                    $output_box->write;
-                    $input_box->write;
+                    $output_box->write
+                        or die "Unable to write to $output_box_path\n";
+                    $input_box->write
+                        or die "Unable to write to $input_box_path\n";
                 }
             }
         }
