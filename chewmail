@@ -15,7 +15,7 @@ Python-based B<archivemail>, but with more useful semantics. All mail
 is archived to the mailbox specified with the B<--output-box> switch,
 in mbox format. It can read mailboxes in mbox, Maildir and MH formats.
 
-Internally, B<chewmail> uses L<Mail::Box>, so it support file names
+Internally, B<chewmail> uses L<Mail::Box>, so it supports file names
 and URLs supported by that module.
 
 =cut
