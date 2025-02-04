@@ -23,11 +23,11 @@ and URLs supported by that module.
 use strict;
 use warnings;
 
-use Mail::Box::Manager;
-use Mail::Message;
 use Date::Format;
 use Date::Parse;
 use Getopt::Long qw(:config no_ignore_case bundling);
+use Mail::Box::Manager;
+use Mail::Message;
 
 my $version = '1.3';
 
@@ -246,6 +246,7 @@ foreach my $input_box_path (@ARGV) {
     }
 
     my ($archived_count, $untouched_count) = (0, 0);
+    my %touched_output_boxes = ();
 
     foreach my $message (@messages) {
         # Hack to workaround bug in Mail::Box, should be removed once fixed
@@ -275,6 +276,8 @@ foreach my $input_box_path (@ARGV) {
                 $message->delete;
             }
 
+            $touch_output_boxes{$output_box_path} = $output_box
+
             $archived_count++;
 
             if ($delete_immediately) {
@@ -290,6 +293,18 @@ foreach my $input_box_path (@ARGV) {
         }
         else {
             $untouched_count++;
+        }
+    }
+
+    unless ($delete_immediately) {
+        for my $touched_output_box_path (keys %touched_output_boxes) {
+            my $touched_output_box =
+                $touched_output_boxes{$touched_output_box_path};
+            print "Flushing $touched_output_box_path\n" if $verbose > 1;
+            unless ($dry_run) {
+                $touched_output_box->write
+                   or die "Unable to write to $touched_output_box_path\n";
+            }
         }
     }
     
