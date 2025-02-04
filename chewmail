@@ -37,30 +37,27 @@ my $input_box;
 my $box_access;
 my $manager = Mail::Box::Manager->new;
 
-sub generate_outbox_path
-{
-    my ($format, $timestamp) = @_;
+sub generate_outbox_path {
+    my ( $format, $timestamp ) = @_;
 
-    return time2str($format, $timestamp);
+    return time2str( $format, $timestamp );
 }
 
-sub include_message
-{
-    my ($timestamp, $date, $days) = @_;
+sub include_message {
+    my ( $timestamp, $date, $days ) = @_;
 
     if ($date) {
         return $timestamp < $date;
     }
     elsif ($days) {
-        return (time - $timestamp) > ($days * 24 * 60 * 60);
+        return ( time - $timestamp ) > ( $days * 24 * 60 * 60 );
     }
 
     return 1;
 }
 
-sub usage
-{
-   return "Usage: chewmail [OPTIONS] <MAILBOX> ...
+sub usage {
+    return "Usage: chewmail [OPTIONS] <MAILBOX> ...
 Archive the messages in <MAILBOX>
 
 -o, --output-box=MAILBOX-FORMAT    Mailbox to archive messages to.
@@ -80,7 +77,7 @@ Archive the messages in <MAILBOX>
 -h, --help                         Print this information and exit.
 
 Report bugs to <eric\@kuroneko.ca>.
-"; 
+";
 }
 
 =head1 OPTIONS
@@ -172,29 +169,30 @@ Print usage information then exit.
 
 # options parsing
 my $output_box_format;
-my $days = 0;
-my $date = '';
+my $days               = 0;
+my $date               = '';
 my $delete_immediately = 0;
-my $only_read = 0;
+my $only_read          = 0;
 my $preserve_timestamp = 0;
-my $dry_run = 0;
-my $verbose = 0;
-my $quiet = 0;
-my $show_version = 0;
-my $help = 0;
+my $dry_run            = 0;
+my $verbose            = 0;
+my $quiet              = 0;
+my $show_version       = 0;
+my $help               = 0;
 
-GetOptions('o|output-box=s' => \$output_box_format,
-           'd|days:i' => \$days,
-           'D|date:s' => \$date,
-           'R|only-read' => \$only_read,
-           'preserve-timestamp' => \$preserve_timestamp,
-           'v|verbose+' => \$verbose,
-           'q|quiet' => \$quiet,
-           'delete-immediately' => \$delete_immediately,
-           'n|dry-run' => \$dry_run,
-           'h|help' => \$help,
-           'V|version' => \$show_version)
-    or die "Configuration error\n\n" . usage;
+GetOptions(
+    'o|output-box=s'     => \$output_box_format,
+    'd|days:i'           => \$days,
+    'D|date:s'           => \$date,
+    'R|only-read'        => \$only_read,
+    'preserve-timestamp' => \$preserve_timestamp,
+    'v|verbose+'         => \$verbose,
+    'q|quiet'            => \$quiet,
+    'delete-immediately' => \$delete_immediately,
+    'n|dry-run'          => \$dry_run,
+    'h|help'             => \$help,
+    'V|version'          => \$show_version
+) or die "Configuration error\n\n" . usage;
 
 if ($show_version) {
     print "$version\n";
@@ -207,10 +205,10 @@ if ($help) {
 }
 
 # If we're doing a dry run, for safety we want to open the mailboxes
-# read-only 
+# read-only
 $box_access = $dry_run ? 'r' : 'rw';
 
-die "Need to specify one mailbox to archive.\n\n" . usage if (@ARGV < 1);
+die "Need to specify one mailbox to archive.\n\n" . usage if ( @ARGV < 1 );
 die "Need to specify an output box.\n\n" . usage unless $output_box_format;
 
 my $output_box_path;
@@ -218,23 +216,24 @@ my $output_box;
 my $timestamp;
 
 foreach my $input_box_path (@ARGV) {
-    my (@status, $atime, $mtime);
-    
-    if (-f $input_box_path) {
-        @status = stat _;
-        ($atime, $mtime) = ($status[8], $status[9]) if @status;
-    }
-    
-    print "Opening mailbox: $input_box_path\n" if $verbose > 0;
-    $input_box = $manager->open(folder => $input_box_path,
-                                access => $box_access,
-                                remove_when_empty => 0)
-        or die "Cannot open folder $input_box_path\n";
+    my ( @status, $atime, $mtime );
 
-    $date = str2time($date) if ($date);
+    if ( -f $input_box_path ) {
+        @status = stat _;
+        ( $atime, $mtime ) = ( $status[8], $status[9] ) if @status;
+    }
+
+    print "Opening mailbox: $input_box_path\n" if $verbose > 0;
+    $input_box = $manager->open(
+        folder            => $input_box_path,
+        access            => $box_access,
+        remove_when_empty => 0
+    ) or die "Cannot open folder $input_box_path\n";
+
+    $date = str2time($date)                  if ($date);
     die "Cannot understand --date option.\n" if !defined($date);
 
-    $quiet = 0 if ($verbose > 0);
+    $quiet = 0 if ( $verbose > 0 );
 
     my @messages;
 
@@ -245,34 +244,36 @@ foreach my $input_box_path (@ARGV) {
         @messages = $input_box->messages();
     }
 
-    my ($archived_count, $untouched_count) = (0, 0);
+    my ( $archived_count, $untouched_count ) = ( 0, 0 );
     my %touched_output_boxes = ();
 
     foreach my $message (@messages) {
+
         # Hack to workaround bug in Mail::Box, should be removed once fixed
         $message->head->load;
 
         $timestamp = $message->timestamp || time;
-        if (include_message($timestamp, $date, $days)) {
-            $output_box_path = generate_outbox_path($output_box_format,
-                                                    $timestamp);
+        if ( include_message( $timestamp, $date, $days ) ) {
+            $output_box_path =
+              generate_outbox_path( $output_box_format, $timestamp );
 
-            if (!exists($output_boxes{$output_box_path})) {
+            if ( !exists( $output_boxes{$output_box_path} ) ) {
                 print "Opening mailbox: $output_boxes{$output_box_path}\n"
-                    if ($verbose > 0);
-                $output_boxes{$output_box_path} = 
-                    $manager->open(folder => $output_box_path, 
-                                   type => 'Mail::Box::Mbox',
-                                   create => 1, access => $box_access) 
-                    or die "Could not open $output_box_path\n";
+                  if ( $verbose > 0 );
+                $output_boxes{$output_box_path} = $manager->open(
+                    folder => $output_box_path,
+                    type   => 'Mail::Box::Mbox',
+                    create => 1,
+                    access => $box_access
+                ) or die "Could not open $output_box_path\n";
             }
             $output_box = $output_boxes{$output_box_path};
-            print "Archiving message: " . $message->messageId . "\n" 
-                if $verbose > 2; 
+            print "Archiving message: " . $message->messageId . "\n"
+              if $verbose > 2;
 
             unless ($dry_run) {
-                $manager->copyMessage($output_box, $message) 
-                    or die "Could not copy message\n";
+                $manager->copyMessage( $output_box, $message )
+                  or die "Could not copy message\n";
                 $message->delete;
             }
 
@@ -281,13 +282,14 @@ foreach my $input_box_path (@ARGV) {
             $archived_count++;
 
             if ($delete_immediately) {
+
                 # Write changes immediately, order matters
-                print "Synching mailboxes\n" if ($verbose > 1);
+                print "Synching mailboxes\n" if ( $verbose > 1 );
                 unless ($dry_run) {
                     $output_box->write
-                        or die "Unable to write to $output_box_path\n";
+                      or die "Unable to write to $output_box_path\n";
                     $input_box->write
-                        or die "Unable to write to $input_box_path\n";
+                      or die "Unable to write to $input_box_path\n";
                 }
             }
         }
@@ -297,28 +299,31 @@ foreach my $input_box_path (@ARGV) {
     }
 
     unless ($delete_immediately) {
-        for my $touched_output_box_path (keys %touched_output_boxes) {
+        for my $touched_output_box_path ( keys %touched_output_boxes ) {
             my $touched_output_box =
-                $touched_output_boxes{$touched_output_box_path};
+              $touched_output_boxes{$touched_output_box_path};
             print "Flushing $touched_output_box_path\n" if $verbose > 1;
             unless ($dry_run) {
                 $touched_output_box->write
-                   or die "Unable to write to $touched_output_box_path\n";
+                  or die "Unable to write to $touched_output_box_path\n";
             }
         }
     }
-    
+
     print "Closing $input_box_path\n" if $verbose > 1;
     $input_box->close;
 
-    utime $atime, $mtime, $input_box_path 
-        if $atime && $mtime && $preserve_timestamp;
+    utime $atime, $mtime, $input_box_path
+      if $atime && $mtime && $preserve_timestamp;
 
-    print "$input_box_path: " . int(@messages) . " messages considered, " .
-        "$archived_count archived, $untouched_count kept\n" unless $quiet;
+    print "$input_box_path: "
+      . int(@messages)
+      . " messages considered, "
+      . "$archived_count archived, $untouched_count kept\n"
+      unless $quiet;
 }
 
-foreach my $output_box (keys %output_boxes) {
+foreach my $output_box ( keys %output_boxes ) {
     print "Closing $output_box" if $verbose > 1;
     $output_boxes{$output_box}->close;
 }
