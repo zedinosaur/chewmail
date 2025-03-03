@@ -1,3 +1,7 @@
+# New in 1.4:
+
+* Flush output boxes before closing input boxes.
+
 # New in 1.3:
 
 * Don't remove empty mailboxes.
