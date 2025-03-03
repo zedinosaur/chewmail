@@ -1,11 +1,14 @@
-New in 1.3:
+# New in 1.3:
+
 * Don't remove empty mailboxes.
 
-New in 1.2:
+# New in 1.2:
+
 * Check that an output box is actually specified
 * Fix --read-only typo in pod docs, thanks Neil McGovern
 
-New in 1.1:
+# New in 1.1:
+
 * Workaround a bug in Mail::Box that was preventing maildirs 
   from working.
 * Default to the current time if a timestamp is not present.
