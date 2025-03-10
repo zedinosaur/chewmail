@@ -277,7 +277,7 @@ foreach my $input_box_path (@ARGV) {
                 $message->delete;
             }
 
-            $touch_output_boxes{$output_box_path} = $output_box;
+            $touched_output_boxes{$output_box_path} = $output_box;
 
             $archived_count++;
 
