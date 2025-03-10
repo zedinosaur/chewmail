@@ -1,3 +1,7 @@
+# New in 1.4.1:
+
+* Fix a variable typo
+
 # New in 1.4:
 
 * Flush output boxes before closing input boxes.
